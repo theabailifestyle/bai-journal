@@ -31,13 +31,10 @@
         <button id="clearBtn" class="badge" title="Delete all entries">Clear</button>
       </div>
     </header>
-
     <nav class="flex gap-2 mb-6">
       <button id="tabJournal" class="px-4 py-2 rounded-xl tab-active">Journal</button>
       <button id="tabReflections" class="px-4 py-2 rounded-xl tab-inactive">Reflections</button>
     </nav>
-
-    <!-- Journal (Freeform) -->
     <section id="panelJournal" class="card rounded-2xl p-5 mb-8">
       <h2 class="text-lg font-semibold mb-3">Freeform Journal</h2>
       <textarea id="freeText" class="input-dark w-full rounded-xl p-3 min-h-[180px]" placeholder="Write freely about your day, thoughts, wins, lessons..."></textarea>
@@ -45,8 +42,6 @@
         <button id="saveFree" class="px-4 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600">Save Entry</button>
       </div>
     </section>
-
-    <!-- Reflections (Guided) -->
     <section id="panelReflections" class="card rounded-2xl p-5 mb-8 hidden">
       <h2 class="text-lg font-semibold mb-3">Guided Reflection</h2>
       <label class="block text-sm mb-1">How do you feel today?</label>
@@ -59,8 +54,6 @@
         <button id="saveGuided" class="px-4 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600">Save Reflection</button>
       </div>
     </section>
-
-    <!-- Search / Filter -->
     <div class="flex items-center gap-2 mb-4">
       <input id="search" class="input-dark rounded-xl p-2 w-full" placeholder="Search entries..." />
       <select id="typeFilter" class="input-dark rounded-xl p-2">
@@ -69,19 +62,50 @@
         <option value="guided">Guided</option>
       </select>
     </div>
-
-    <!-- Entries List -->
     <div id="entries" class="space-y-4"></div>
-
     <footer class="mt-16 text-center text-zinc-400 text-sm">
       <p>Data is saved privately in your browser (localStorage). You can Export/Import anytime.</p>
     </footer>
   </div>
-
-  <!-- The rest of the JS stays the same -->
   <script>
-    // (keep everything else exactly as is from your original script)
+    const STORAGE_KEY = 'bai_journal_entries_v1';
+    const entriesEl = document.getElementById('entries');
+    const searchEl = document.getElementById('search');
+    const typeFilterEl = document.getElementById('typeFilter');
+    const tabJournal = document.getElementById('tabJournal');
+    const tabReflections = document.getElementById('tabReflections');
+    const panelJournal = document.getElementById('panelJournal');
+    const panelReflections = document.getElementById('panelReflections');
+
+    tabJournal.addEventListener('click', () => selectTab('journal'));
+    tabReflections.addEventListener('click', () => selectTab('reflections'));
+
+    function selectTab(key){
+      const isJournal = key === 'journal';
+      panelJournal.classList.toggle('hidden', !isJournal);
+      panelReflections.classList.toggle('hidden', isJournal);
+      tabJournal.classList.toggle('tab-active', isJournal);
+      tabJournal.classList.toggle('tab-inactive', !isJournal);
+      tabReflections.classList.toggle('tab-active', !isJournal);
+      tabReflections.classList.toggle('tab-inactive', isJournal);
+    }
+
+    function load(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+    function save(data){ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+    function render(){
+      const q = searchEl.value.trim().toLowerCase();
+      const t = typeFilterEl.value;
+      const items = load().filter(e => t==='all'||e.type===t).filter(e => !q || e.content.toLowerCase().includes(q)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+      entriesEl.innerHTML = items.length ? '' : '<p class="text-center text-zinc-400">No entries yet — start writing something ✍️</p>';
+      for(const e of items){ const div=document.createElement('div'); div.className='card rounded-2xl p-4'; div.innerHTML=`<div class="flex items-start justify-between gap-4"><div><div class="flex items-center gap-2 mb-1"><span class="badge">${e.type}</span><span class="text-xs text-zinc-400">${new Date(e.date).toLocaleString()}</span></div><pre class="whitespace-pre-wrap text-zinc-100">${e.content}</pre></div><div class="flex gap-2 shrink-0"><button class="badge" data-act="edit" data-id="${e.id}">Edit</button><button class="badge" data-act="delete" data-id="${e.id}">Delete</button></div></div>`; entriesEl.appendChild(div);}}
+    document.getElementById('saveFree').addEventListener('click',()=>{const t=document.getElementById('freeText').value.trim();if(!t)return alert('Write something first 🙂');const d=load();d.push({id:crypto.randomUUID(),type:'freeform',date:new Date().toISOString(),content:t});save(d);document.getElementById('freeText').value='';render();});
+    document.getElementById('saveGuided').addEventListener('click',()=>{const m=document.getElementById('mood').value.trim();const g=document.getElementById('gratitude').value.trim();const l=document.getElementById('lesson').value.trim();if(!m&&!g&&!l)return alert('Write at least one reflection 🙂');const block=[m?`Mood: ${m}`:'',g?`Grateful for: ${g}`:'',l?`Lesson: ${l}`:''].filter(Boolean).join('\n\n');const d=load();d.push({id:crypto.randomUUID(),type:'guided',date:new Date().toISOString(),content:block});save(d);document.getElementById('mood').value=document.getElementById('gratitude').value=document.getElementById('lesson').value='';render();});
+    entriesEl.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const id=b.dataset.id,act=b.dataset.act,d=load(),i=d.findIndex(x=>x.id===id);if(i===-1)return;if(act==='delete'){if(confirm('Delete this entry?')){d.splice(i,1);save(d);render();}}else if(act==='edit'){const u=prompt('Edit entry text:',d[i].content);if(u!==null){d[i].content=u;save(d);render();}}});
+    document.getElementById('exportBtn').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(load(),null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='bai-journal-export.json';a.click();URL.revokeObjectURL(url);});
+    document.getElementById('importInput').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(Array.isArray(d)){save(d);render();}else alert('Invalid file.');}catch{alert('Invalid JSON.');}};r.readAsText(f);e.target.value='';});
+    document.getElementById('clearBtn').addEventListener('click',()=>{if(confirm('Clear ALL entries? This cannot be undone.')){save([]);render();}});
+    searchEl.addEventListener('input',render);typeFilterEl.addEventListener('change',render);render();
   </script>
 </body>
 </html>
- 
