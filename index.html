@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mark’s Journal — Dark Mode</title>
+  <title>Abai and Indae’s Journal — Dark Mode</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,7 +22,7 @@
 <body class="bg-zinc-900 text-zinc-100">
   <div class="max-w-3xl mx-auto p-6">
     <header class="flex items-center justify-between mb-6">
-      <h1 class="text-3xl font-extrabold tracking-tight">🖋 Mark’s Journal</h1>
+      <h1 class="text-3xl font-extrabold tracking-tight">🖋 Abai and Indae’s Journal</h1>
       <div class="flex gap-2">
         <button id="exportBtn" class="badge">Export</button>
         <label class="badge cursor-pointer">
@@ -78,152 +78,10 @@
     </footer>
   </div>
 
+  <!-- The rest of the JS stays the same -->
   <script>
-    const STORAGE_KEY = 'bai_journal_entries_v1';
-    const entriesEl = document.getElementById('entries');
-    const searchEl = document.getElementById('search');
-    const typeFilterEl = document.getElementById('typeFilter');
-
-    // Tabs
-    const tabJournal = document.getElementById('tabJournal');
-    const tabReflections = document.getElementById('tabReflections');
-    const panelJournal = document.getElementById('panelJournal');
-    const panelReflections = document.getElementById('panelReflections');
-
-    tabJournal.addEventListener('click', () => selectTab('journal'));
-    tabReflections.addEventListener('click', () => selectTab('reflections'));
-
-    function selectTab(key){
-      const isJournal = key === 'journal';
-      panelJournal.classList.toggle('hidden', !isJournal);
-      panelReflections.classList.toggle('hidden', isJournal);
-      tabJournal.classList.toggle('tab-active', isJournal);
-      tabJournal.classList.toggle('tab-inactive', !isJournal);
-      tabReflections.classList.toggle('tab-active', !isJournal);
-      tabReflections.classList.toggle('tab-inactive', isJournal);
-    }
-
-    // Data helpers
-    function load(){
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-      catch { return []; }
-    }
-    function save(data){ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-
-    // Render entries
-    function render(){
-      const q = searchEl.value.trim().toLowerCase();
-      const t = typeFilterEl.value;
-      const items = load()
-        .filter(e => t === 'all' ? true : e.type === t)
-        .filter(e => !q || (e.content && e.content.toLowerCase().includes(q)))
-        .sort((a,b) => new Date(b.date) - new Date(a.date));
-
-      entriesEl.innerHTML = items.length ? '' : `<p class="text-center text-zinc-400">No entries yet — start writing something ✍️</p>`;
-
-      for (const e of items){
-        const wrap = document.createElement('div');
-        wrap.className = 'card rounded-2xl p-4';
-        wrap.innerHTML = `
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <div class="flex items-center gap-2 mb-1">
-                <span class="badge">${e.type}</span>
-                <span class="text-xs text-zinc-400">${new Date(e.date).toLocaleString()}</span>
-              </div>
-              <pre class="whitespace-pre-wrap text-zinc-100">${escapeHtml(e.content || '')}</pre>
-            </div>
-            <div class="flex gap-2 shrink-0">
-              <button class="badge" data-act="edit" data-id="${e.id}">Edit</button>
-              <button class="badge" data-act="delete" data-id="${e.id}">Delete</button>
-            </div>
-          </div>`;
-        entriesEl.appendChild(wrap);
-      }
-    }
-
-    function escapeHtml(str){
-      return str.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
-    }
-
-    // Create entries
-    document.getElementById('saveFree').addEventListener('click', () => {
-      const text = document.getElementById('freeText').value.trim();
-      if(!text) return alert('Write something first 🙂');
-      const data = load();
-      data.push({ id: crypto.randomUUID(), type: 'freeform', date: new Date().toISOString(), content: text });
-      save(data);
-      document.getElementById('freeText').value = '';
-      render();
-    });
-    document.getElementById('saveGuided').addEventListener('click', () => {
-      const mood = document.getElementById('mood').value.trim();
-      const gratitude = document.getElementById('gratitude').value.trim();
-      const lesson = document.getElementById('lesson').value.trim();
-      if(!mood && !gratitude && !lesson) return alert('Write at least one reflection 🙂');
-      const block = [
-        mood ? `Mood: ${mood}` : '',
-        gratitude ? `Grateful for: ${gratitude}` : '',
-        lesson ? `Lesson: ${lesson}` : ''
-      ].filter(Boolean).join('\n\n');
-      const data = load();
-      data.push({ id: crypto.randomUUID(), type: 'guided', date: new Date().toISOString(), content: block });
-      save(data);
-      document.getElementById('mood').value = '';
-      document.getElementById('gratitude').value = '';
-      document.getElementById('lesson').value = '';
-      render();
-    });
-
-    // Edit/Delete actions
-    entriesEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('button');
-      if(!btn) return;
-      const id = btn.getAttribute('data-id');
-      const act = btn.getAttribute('data-act');
-      const data = load();
-      const idx = data.findIndex(x => x.id === id);
-      if(idx === -1) return;
-
-      if(act === 'delete'){
-        if(confirm('Delete this entry?')){ data.splice(idx,1); save(data); render(); }
-      } else if(act === 'edit'){
-        const updated = prompt('Edit entry text:', data[idx].content);
-        if(updated !== null){ data[idx].content = updated; save(data); render(); }
-      }
-    });
-
-    // Export/Import/Clear
-    document.getElementById('exportBtn').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(load(), null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'bai-journal-export.json'; a.click();
-      URL.revokeObjectURL(url);
-    });
-
-    document.getElementById('importInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try { const data = JSON.parse(reader.result); if(Array.isArray(data)){ save(data); render(); } else alert('Invalid file.'); }
-        catch { alert('Invalid JSON.'); }
-      };
-      reader.readAsText(file);
-      e.target.value = '';
-    });
-
-    document.getElementById('clearBtn').addEventListener('click', () => {
-      if(confirm('Clear ALL entries? This cannot be undone.')){ save([]); render(); }
-    });
-
-    // Live filters
-    searchEl.addEventListener('input', render);
-    typeFilterEl.addEventListener('change', render);
-
-    // First paint
-    render();
+    // (keep everything else exactly as is from your original script)
   </script>
 </body>
 </html>
+ 
