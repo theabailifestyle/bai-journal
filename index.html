@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mark’s Journal — Dark Mode</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    html,body { height: 100%; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .tab-active { background-color: rgb(39 39 42); color: white; }
+    .tab-inactive { background-color: rgb(24 24 27); color: rgb(161 161 170); }
+    .card { background: rgb(39 39 42); border: 1px solid rgb(63 63 70); }
+    .input-dark { background: rgb(24 24 27); border: 1px solid rgb(63 63 70); color: rgb(244 244 245); }
+    .badge { border: 1px solid rgb(82 82 91); background: rgb(24 24 27); padding: 2px 8px; border-radius: 9999px; font-size: 12px; }
+  </style>
+</head>
+<body class="bg-zinc-900 text-zinc-100">
+  <div class="max-w-3xl mx-auto p-6">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-3xl font-extrabold tracking-tight">🖋 Mark’s Journal</h1>
+      <div class="flex gap-2">
+        <button id="exportBtn" class="badge">Export</button>
+        <label class="badge cursor-pointer">
+          Import <input id="importInput" type="file" accept="application/json" class="hidden" />
+        </label>
+        <button id="clearBtn" class="badge" title="Delete all entries">Clear</button>
+      </div>
+    </header>
+
+    <nav class="flex gap-2 mb-6">
+      <button id="tabJournal" class="px-4 py-2 rounded-xl tab-active">Journal</button>
+      <button id="tabReflections" class="px-4 py-2 rounded-xl tab-inactive">Reflections</button>
+    </nav>
+
+    <!-- Journal (Freeform) -->
+    <section id="panelJournal" class="card rounded-2xl p-5 mb-8">
+      <h2 class="text-lg font-semibold mb-3">Freeform Journal</h2>
+      <textarea id="freeText" class="input-dark w-full rounded-xl p-3 min-h-[180px]" placeholder="Write freely about your day, thoughts, wins, lessons..."></textarea>
+      <div class="flex items-center justify-end mt-3 gap-2">
+        <button id="saveFree" class="px-4 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600">Save Entry</button>
+      </div>
+    </section>
+
+    <!-- Reflections (Guided) -->
+    <section id="panelReflections" class="card rounded-2xl p-5 mb-8 hidden">
+      <h2 class="text-lg font-semibold mb-3">Guided Reflection</h2>
+      <label class="block text-sm mb-1">How do you feel today?</label>
+      <textarea id="mood" class="input-dark w-full rounded-xl p-3 mb-4 min-h-[80px]"></textarea>
+      <label class="block text-sm mb-1">What are you grateful for?</label>
+      <textarea id="gratitude" class="input-dark w-full rounded-xl p-3 mb-4 min-h-[80px]"></textarea>
+      <label class="block text-sm mb-1">What did you learn or realize today?</label>
+      <textarea id="lesson" class="input-dark w-full rounded-xl p-3 mb-4 min-h-[80px]"></textarea>
+      <div class="flex items-center justify-end mt-3 gap-2">
+        <button id="saveGuided" class="px-4 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600">Save Reflection</button>
+      </div>
+    </section>
+
+    <!-- Search / Filter -->
+    <div class="flex items-center gap-2 mb-4">
+      <input id="search" class="input-dark rounded-xl p-2 w-full" placeholder="Search entries..." />
+      <select id="typeFilter" class="input-dark rounded-xl p-2">
+        <option value="all">All</option>
+        <option value="freeform">Freeform</option>
+        <option value="guided">Guided</option>
+      </select>
+    </div>
+
+    <!-- Entries List -->
+    <div id="entries" class="space-y-4"></div>
+
+    <footer class="mt-16 text-center text-zinc-400 text-sm">
+      <p>Data is saved privately in your browser (localStorage). You can Export/Import anytime.</p>
+    </footer>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'bai_journal_entries_v1';
+    const entriesEl = document.getElementById('entries');
+    const searchEl = document.getElementById('search');
+    const typeFilterEl = document.getElementById('typeFilter');
+
+    // Tabs
+    const tabJournal = document.getElementById('tabJournal');
+    const tabReflections = document.getElementById('tabReflections');
+    const panelJournal = document.getElementById('panelJournal');
+    const panelReflections = document.getElementById('panelReflections');
+
+    tabJournal.addEventListener('click', () => selectTab('journal'));
+    tabReflections.addEventListener('click', () => selectTab('reflections'));
+
+    function selectTab(key){
+      const isJournal = key === 'journal';
+      panelJournal.classList.toggle('hidden', !isJournal);
+      panelReflections.classList.toggle('hidden', isJournal);
+      tabJournal.classList.toggle('tab-active', isJournal);
+      tabJournal.classList.toggle('tab-inactive', !isJournal);
+      tabReflections.classList.toggle('tab-active', !isJournal);
+      tabReflections.classList.toggle('tab-inactive', isJournal);
+    }
+
+    // Data helpers
+    function load(){
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch { return []; }
+    }
+    function save(data){ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+    // Render entries
+    function render(){
+      const q = searchEl.value.trim().toLowerCase();
+      const t = typeFilterEl.value;
+      const items = load()
+        .filter(e => t === 'all' ? true : e.type === t)
+        .filter(e => !q || (e.content && e.content.toLowerCase().includes(q)))
+        .sort((a,b) => new Date(b.date) - new Date(a.date));
+
+      entriesEl.innerHTML = items.length ? '' : `<p class="text-center text-zinc-400">No entries yet — start writing something ✍️</p>`;
+
+      for (const e of items){
+        const wrap = document.createElement('div');
+        wrap.className = 'card rounded-2xl p-4';
+        wrap.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="badge">${e.type}</span>
+                <span class="text-xs text-zinc-400">${new Date(e.date).toLocaleString()}</span>
+              </div>
+              <pre class="whitespace-pre-wrap text-zinc-100">${escapeHtml(e.content || '')}</pre>
+            </div>
+            <div class="flex gap-2 shrink-0">
+              <button class="badge" data-act="edit" data-id="${e.id}">Edit</button>
+              <button class="badge" data-act="delete" data-id="${e.id}">Delete</button>
+            </div>
+          </div>`;
+        entriesEl.appendChild(wrap);
+      }
+    }
+
+    function escapeHtml(str){
+      return str.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+    }
+
+    // Create entries
+    document.getElementById('saveFree').addEventListener('click', () => {
+      const text = document.getElementById('freeText').value.trim();
+      if(!text) return alert('Write something first 🙂');
+      const data = load();
+      data.push({ id: crypto.randomUUID(), type: 'freeform', date: new Date().toISOString(), content: text });
+      save(data);
+      document.getElementById('freeText').value = '';
+      render();
+    });
+    document.getElementById('saveGuided').addEventListener('click', () => {
+      const mood = document.getElementById('mood').value.trim();
+      const gratitude = document.getElementById('gratitude').value.trim();
+      const lesson = document.getElementById('lesson').value.trim();
+      if(!mood && !gratitude && !lesson) return alert('Write at least one reflection 🙂');
+      const block = [
+        mood ? `Mood: ${mood}` : '',
+        gratitude ? `Grateful for: ${gratitude}` : '',
+        lesson ? `Lesson: ${lesson}` : ''
+      ].filter(Boolean).join('\n\n');
+      const data = load();
+      data.push({ id: crypto.randomUUID(), type: 'guided', date: new Date().toISOString(), content: block });
+      save(data);
+      document.getElementById('mood').value = '';
+      document.getElementById('gratitude').value = '';
+      document.getElementById('lesson').value = '';
+      render();
+    });
+
+    // Edit/Delete actions
+    entriesEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      const id = btn.getAttribute('data-id');
+      const act = btn.getAttribute('data-act');
+      const data = load();
+      const idx = data.findIndex(x => x.id === id);
+      if(idx === -1) return;
+
+      if(act === 'delete'){
+        if(confirm('Delete this entry?')){ data.splice(idx,1); save(data); render(); }
+      } else if(act === 'edit'){
+        const updated = prompt('Edit entry text:', data[idx].content);
+        if(updated !== null){ data[idx].content = updated; save(data); render(); }
+      }
+    });
+
+    // Export/Import/Clear
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(load(), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'bai-journal-export.json'; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try { const data = JSON.parse(reader.result); if(Array.isArray(data)){ save(data); render(); } else alert('Invalid file.'); }
+        catch { alert('Invalid JSON.'); }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      if(confirm('Clear ALL entries? This cannot be undone.')){ save([]); render(); }
+    });
+
+    // Live filters
+    searchEl.addEventListener('input', render);
+    typeFilterEl.addEventListener('change', render);
+
+    // First paint
+    render();
+  </script>
+</body>
+</html>
